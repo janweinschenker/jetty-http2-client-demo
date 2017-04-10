@@ -91,7 +91,6 @@ public class App {
 
     // Configure HttpClient, for example:
     httpClient.setFollowRedirects(false);
-    //httpClient.setExecutor(Executors.newFixedThreadPool(4));
     return httpClient;
   }
 
