@@ -1,5 +1,6 @@
 package de.holisticon.jdk9.http2.util;
 
+import org.apache.log4j.Logger;
 import org.eclipse.jetty.http2.api.Stream;
 import org.eclipse.jetty.http2.api.Stream.Listener.Adapter;
 import org.eclipse.jetty.http2.frames.DataFrame;
@@ -16,6 +17,7 @@ import java.util.concurrent.Phaser;
  */
 public class StreamListener extends Adapter {
 
+    private static final Logger LOG = Logger.getLogger(StreamListener.class);
     private Phaser phaser;
 
     public StreamListener(Phaser phaser) {
@@ -24,15 +26,16 @@ public class StreamListener extends Adapter {
 
     @Override
     public Stream.Listener onPush(Stream stream, PushPromiseFrame frame) {
-        System.err.println("onPush: " + frame);
-
+        LOG.debug("onPush: " + frame);
         phaser.register();
         return this;
     }
 
     @Override
     public void onHeaders(Stream stream, HeadersFrame frame) {
-        System.err.println("onHeaders: " + frame);
+        LOG.debug("onHeaders: " + frame);
+        LOG.debug("http version: " +frame.getMetaData().getHttpVersion());
+
         if (frame.isEndStream()) {
             phaser.arrive();
         }
@@ -40,8 +43,7 @@ public class StreamListener extends Adapter {
 
     @Override
     public void onData(Stream stream, DataFrame frame, Callback callback) {
-        System.err.println("onData: " + new String(frame.getData().array(), Charset.forName("UTF8")));
-        frame.getData().get();
+        LOG.debug("onData: " + new String(frame.toString().getBytes(), Charset.forName("UTF8")));
         callback.succeeded();
         if (frame.isEndStream()) {
             phaser.arrive();

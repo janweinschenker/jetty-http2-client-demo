@@ -1,26 +1,22 @@
 package de.holisticon.jdk9;
 
-import de.holisticon.jdk9.http2.util.StreamListener;
 import org.apache.log4j.Logger;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.HttpClientTransport;
+import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MetaData;
-import org.eclipse.jetty.http2.api.Session;
-import org.eclipse.jetty.http2.api.Stream;
-import org.eclipse.jetty.http2.api.server.ServerSessionListener;
 import org.eclipse.jetty.http2.client.HTTP2Client;
+import org.eclipse.jetty.http2.client.http.HttpClientTransportOverHTTP2;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
-import org.eclipse.jetty.util.FuturePromise;
+import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Jetty;
-import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
-import java.net.InetSocketAddress;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Hello world!
@@ -31,60 +27,90 @@ import java.util.concurrent.TimeoutException;
  */
 public class App {
 
-    private static final Logger LOG = Logger.getLogger(App.class);
+  private static final Logger LOG = Logger.getLogger(App.class);
 
-    public static void main(String[] args) {
-        App app = new App();
-        String host = "nghttp2.org";
-        int port = 443;
-        String path = "/#/";
-        app.performHttpRequest(host, port, path);
+  public static void main(String[] args) {
+    App app = new App();
+    String host = "localhost";
+    int port = 8443;
+    String path = "/greeting?name=JavaLand";
+    app.performAsyncHttpRequest(host, port, path);
+    app.performDefaultHttpRequest(host, port, path);
+    System.exit(0);
+  }
+
+  public void performAsyncHttpRequest(String host, int port, String path) {
+
+    LOG.debug("============================================= Asynchronous example ===");
+    try {
+      HttpClient httpClient = getHttpClient();
+      httpClient.start();
+      String uri = String.format("https://%s:%s%s", host, port, path);
+
+      Request request =
+          httpClient.newRequest(uri)
+                    .onResponseContent((response, byteBuffer) -> {
+                      LOG.debug("content: " + BufferUtil.toString(byteBuffer));
+                    });
+      request.send(result -> {
+        LOG.debug("http version: " +
+            result.getResponse().getVersion());
+      });
+
+      Thread.sleep(5000);
+
+    } catch (Exception e) {
+      LOG.error("Exception:", e);
     }
+  }
 
-    public HTTP2Client performHttpRequest(String host, int port, String path) {
-        HTTP2Client http2Client = new HTTP2Client();
-        FuturePromise<Session> sessionPromise = new FuturePromise<>();
-        SslContextFactory contextFactory = new SslContextFactory(true);
-        http2Client.addBean(contextFactory);
+  public void performDefaultHttpRequest(String host, int port, String path) {
 
-        try {
-            http2Client.start();
-            http2Client.connect(contextFactory, new InetSocketAddress(host, port), new ServerSessionListener.Adapter(), sessionPromise);
-            Session session = sessionPromise.get(5, TimeUnit.SECONDS);
-            HeadersFrame requestHeaders = getRequestHeaders(host, port, path, http2Client);
-            final Phaser phaser = new Phaser(2);
-            session.newStream(requestHeaders, new Promise.Adapter<Stream>(), new StreamListener(phaser));
+    LOG.debug("============================================= Synchronous example ===");
+    try {
+      HttpClient httpClient = getHttpClient();
+      httpClient.start();
+      String uri = String.format("https://%s:%s%s", host, port, path);
 
-            phaser.awaitAdvanceInterruptibly(phaser.arrive(), 5, TimeUnit.SECONDS);
-            http2Client.stop();
-        } catch (InterruptedException e) {
-            LOG.error("InterruptedException", e);
-        } catch (ExecutionException e) {
-            LOG.error("ExecutionException", e);
-        } catch (TimeoutException e) {
-            LOG.error("TimeoutException", e);
-        } catch (Exception e) {
-            LOG.error("Exception", e);
-        }
+      ContentResponse response = httpClient.GET(uri);
 
-        return http2Client;
+      LOG.debug("http version: " + response.getVersion());
+      LOG.debug(response.getContentAsString());
+
+    } catch (Exception e) {
+      LOG.error("Exception:", e);
     }
+  }
 
-    /**
-     * Create the necessary request headers.
-     *
-     * @param host
-     * @param port
-     * @param path
-     * @param http2Client
-     * @return
-     */
-    private HeadersFrame getRequestHeaders(String host, int port, String path, HTTP2Client http2Client) {
-        HttpFields requestFields = new HttpFields();
-        requestFields.put("User-Agent", http2Client.getClass().getName() + "/" + Jetty.VERSION);
-        MetaData.Request metaData = new MetaData.Request("GET", new HttpURI("https://" + host + ":" + port + path), HttpVersion.HTTP_2, requestFields);
-        HeadersFrame headersFrame = new HeadersFrame(metaData, null, true);
-        return headersFrame;
-    }
+
+  private HttpClient getHttpClient() {
+    SslContextFactory sslContextFactory = new SslContextFactory();
+    HttpClientTransport transport = new HttpClientTransportOverHTTP2(
+        new HTTP2Client());
+    HttpClient httpClient = new HttpClient(transport, sslContextFactory);
+
+    // Configure HttpClient, for example:
+    httpClient.setFollowRedirects(false);
+    //httpClient.setExecutor(Executors.newFixedThreadPool(4));
+    return httpClient;
+  }
+
+
+  /**
+   * Create the necessary request headers.
+   *
+   * @param host
+   * @param port
+   * @param path
+   * @param http2Client
+   * @return
+   */
+  private HeadersFrame getRequestHeaders(String host, int port, String path, HTTP2Client http2Client) {
+    HttpFields requestFields = new HttpFields();
+    requestFields.put("User-Agent", http2Client.getClass().getName() + "/" + Jetty.VERSION);
+    MetaData.Request metaData = new MetaData.Request("GET", new HttpURI("https://" + host + ":" + port + path), HttpVersion.HTTP_2, requestFields);
+    HeadersFrame headersFrame = new HeadersFrame(metaData, null, true);
+    return headersFrame;
+  }
 
 }
