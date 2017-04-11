@@ -56,7 +56,8 @@ public class App {
         LOG.debug("http version: " +
             result.getResponse().getVersion());
       });
-
+      
+      LOG.debug("request created!!!");
       Thread.sleep(5000);
 
     } catch (Exception e) {
