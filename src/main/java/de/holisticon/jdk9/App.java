@@ -16,8 +16,6 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Jetty;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Hello world!
  *
@@ -40,23 +38,23 @@ public class App {
   }
 
   public void performAsyncHttpRequest(String host, int port, String path) {
-
     LOG.debug("============================================= Asynchronous example ===");
     try {
       HttpClient httpClient = getHttpClient();
-      httpClient.start();
-      String uri = String.format("https://%s:%s%s", host, port, path);
+      String uri = getFormatedUri(host, port, path);
 
       Request request =
           httpClient.newRequest(uri)
                     .onResponseContent((response, byteBuffer) -> {
                       LOG.debug("content: " + BufferUtil.toString(byteBuffer));
+                      LOG.debug("");
                     });
       request.send(result -> {
         LOG.debug("http version: " +
             result.getResponse().getVersion());
       });
-      
+
+      // watch the console log: the following message will be printed before the request has finished.
       LOG.debug("request created!!!");
       Thread.sleep(5000);
 
@@ -65,33 +63,37 @@ public class App {
     }
   }
 
-  public void performDefaultHttpRequest(String host, int port, String path) {
 
+  public void performDefaultHttpRequest(String host, int port, String path) {
     LOG.debug("============================================= Synchronous example ===");
     try {
       HttpClient httpClient = getHttpClient();
-      httpClient.start();
-      String uri = String.format("https://%s:%s%s", host, port, path);
-
+      String uri = getFormatedUri(host, port, path);
       ContentResponse response = httpClient.GET(uri);
 
       LOG.debug("http version: " + response.getVersion());
       LOG.debug(response.getContentAsString());
+      LOG.debug("");
 
     } catch (Exception e) {
       LOG.error("Exception:", e);
     }
   }
 
-
-  private HttpClient getHttpClient() {
+  /**
+   * Create a jetty http client capable to speak http/2.
+   * @return
+   * @throws Exception
+   */
+  private static HttpClient getHttpClient() throws Exception {
     SslContextFactory sslContextFactory = new SslContextFactory();
     HttpClientTransport transport = new HttpClientTransportOverHTTP2(
         new HTTP2Client());
     HttpClient httpClient = new HttpClient(transport, sslContextFactory);
 
-    // Configure HttpClient, for example:
     httpClient.setFollowRedirects(false);
+    httpClient.start();
+
     return httpClient;
   }
 
@@ -105,12 +107,23 @@ public class App {
    * @param http2Client
    * @return
    */
-  private HeadersFrame getRequestHeaders(String host, int port, String path, HTTP2Client http2Client) {
+  private static HeadersFrame getRequestHeaders(String host, int port, String path, HTTP2Client http2Client) {
     HttpFields requestFields = new HttpFields();
     requestFields.put("User-Agent", http2Client.getClass().getName() + "/" + Jetty.VERSION);
     MetaData.Request metaData = new MetaData.Request("GET", new HttpURI("https://" + host + ":" + port + path), HttpVersion.HTTP_2, requestFields);
     HeadersFrame headersFrame = new HeadersFrame(metaData, null, true);
     return headersFrame;
+  }
+
+  /**
+   * Create uri from the three method parameters.
+   * @param host
+   * @param port
+   * @param path
+   * @return
+   */
+  private static String getFormatedUri(String host, int port, String path) {
+    return String.format("https://%s:%s%s", host, port, path);
   }
 
 }
